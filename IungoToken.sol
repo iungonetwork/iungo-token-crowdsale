@@ -275,30 +275,27 @@ contract IungoToken is StandardToken, Owned {
 
     /// seconds since 01.01.1970 to 06.12.2017 12:00:00 UTC
     /// tier 1 start time
-    uint64 private date06Dec2017 = 1512561600;
+    uint64 private constant date06Dec2017 = 1512561600;
 
     /// seconds since 01.01.1970 to 21.12.2017 14:00:00 UTC
     /// tier 1 end time; tier 2 start time
-    uint64 private date21Dec2017 = 1513864800; 
+    uint64 private constant date21Dec2017 = 1513864800;
 
     /// seconds since 01.01.1970 to 12.01.2018 14:00:00 UTC
     /// tier 2 end time; tier 3 start time
-    uint64 private date12Jan2018 = 1515765600; 
+    uint64 private constant date12Jan2018 = 1515765600;
 
     /// seconds since 01.01.1970 to 21.01.2018 14:00:00 UTC
     /// tier 3 end time; tier 4 start time
-    uint64 private date21Jan2018 = 1516543200; 
+    uint64 private constant date21Jan2018 = 1516543200;
 
-    /// seconds since 01.01.1970 to 31.01.2018 14:00:00 UTC
+    /// seconds since 01.01.1970 to 31.01.2018 23:59:59 UTC
     /// tier 4 end time; closing token sale; trading open
-    uint64 private date31Jan2018 = 1517407200; 
+    uint64 private constant date31Jan2018 = 1517443199;
     
     /// Base exchange rate is set to 1 ETH = 1000 ING
     uint256 public constant BASE_RATE = 1000;
-    
-    /// the percentage value (0-100) of the discount for each tier
-    uint8[4] public tierDiscountPercentages = [50, 35, 15, 0];
-    
+
     /// no tokens can be ever issued when this is set to "true"
     bool public tokenSaleClosed = false;
     
@@ -308,7 +305,7 @@ contract IungoToken is StandardToken, Owned {
     /// Emitted for each sucuessful token purchase.
     event Issue(uint _issueIndex, address addr, uint tokenAmount);
 
-    /// Require that the investors can still purchase 
+    /// Require that the buyers can still purchase
     modifier inProgress {
         require(totalSupply < TOKENS_SALE_HARD_CAP 
                 && !tokenSaleClosed 
@@ -359,13 +356,13 @@ contract IungoToken is StandardToken, Owned {
     }
     
     /// @dev Issue token based on Ether received.
-    /// @param _investor Address that newly issued token will be sent to.
-    function purchaseTokens(address _investor) public payable inProgress {
+    /// @param _beneficiary Address that newly issued token will be sent to.
+    function purchaseTokens(address _beneficiary) public payable inProgress {
         // only accept a minimum amount of ETH?
         require(msg.value >= 0.01 ether);
 
         uint256 tokens = computeTokenAmount(msg.value);
-        doIssueTokens(_investor, tokens);
+        doIssueTokens(_beneficiary, tokens);
     }
 
     /// @dev Batch issue tokens on the presale
@@ -380,18 +377,18 @@ contract IungoToken is StandardToken, Owned {
         }
     }
 
-    /// @dev Issue tokens for a single investor on the presale
-    /// @param _investor addresses that the presale tokens will be sent to.
+    /// @dev Issue tokens for a single buyer on the presale
+    /// @param _beneficiary addresses that the presale tokens will be sent to.
     /// @param _tokensAmount the amount of tokens, with decimals expanded (full).
-    function issueTokens(address _investor, uint256 _tokensAmount) public onlyOwner inProgress {
-        doIssueTokens(_investor, _tokensAmount);
+    function issueTokens(address _beneficiary, uint256 _tokensAmount) public onlyOwner inProgress {
+        doIssueTokens(_beneficiary, _tokensAmount);
     }
 
-    /// @dev issue tokens for a single investor
-    /// @param _investor addresses that the tokens will be sent to.
+    /// @dev issue tokens for a single buyer
+    /// @param _beneficiary addresses that the tokens will be sent to.
     /// @param _tokensAmount the amount of tokens, with decimals expanded (full).
-    function doIssueTokens(address _investor, uint256 _tokensAmount) internal inProgress {
-        require(_investor != address(0));
+    function doIssueTokens(address _beneficiary, uint256 _tokensAmount) internal {
+        require(_beneficiary != address(0));
 
         // compute without actually increasing it
         uint256 increasedTotalSupply = totalSupply.add(_tokensAmount);
@@ -400,12 +397,12 @@ contract IungoToken is StandardToken, Owned {
 
         // increase token total supply
         totalSupply = increasedTotalSupply;
-        // update the investors balance to number of tokens sent
-        balances[_investor] = balances[_investor].add(_tokensAmount);
+        // update the buyer's balance to number of tokens sent
+        balances[_beneficiary] = balances[_beneficiary].add(_tokensAmount);
         // event is fired when tokens issued
         Issue(
             issueIndex++,
-            _investor,
+            _beneficiary,
             _tokensAmount
         );
     }
@@ -414,34 +411,25 @@ contract IungoToken is StandardToken, Owned {
     /// @param ethAmount Amount of Ether to purchase ING.
     /// @return Amount of ING token to purchase
     function computeTokenAmount(uint256 ethAmount) internal view returns (uint256 tokens) {
-        uint256 tier = currentTier();
-
-        // A safe check
-        if (tier >= tierDiscountPercentages.length) {
-            tier = tierDiscountPercentages.length - 1;
-        }
+        /// the percentage value (0-100) of the discount for each tier
+        uint64 discountPercentage = currentTierDiscountPercentage();
 
         uint256 tokenBase = ethAmount.mul(BASE_RATE);
-        uint256 tokenBonus = tokenBase.mul(tierDiscountPercentages[tier]).div(100);
+        uint256 tokenBonus = tokenBase.mul(discountPercentage).div(100);
 
         tokens = tokenBase.add(tokenBonus);
     }
     
     /// @dev Determine the current sale tier.
     /// @return the index of the current sale tier.
-    function currentTier() internal view returns (uint64) {
+    function currentTierDiscountPercentage() internal view returns (uint64) {
         uint64 _now = uint64(block.timestamp);
         require(_now <= date31Jan2018);
-        
-        if(_now > date06Dec2017 && _now <= date21Dec2017) {
-            return 0;
-        } else if(_now > date21Dec2017 && _now <= date12Jan2018) {
-            return 1;
-        } else if(_now > date12Jan2018 && _now <= date21Jan2018) {
-            return 2;
-        } else if(_now > date21Jan2018 && _now <= date31Jan2018) {
-            return 3;   
-        }
+
+        if(_now > date21Jan2018) return 0;
+        if(_now > date12Jan2018) return 15;
+        if(_now > date21Dec2017) return 35;
+        return 50;
     }
 
     /// @dev Finalize the sale and distribute the reserve, team tokens, lock the founders tokens
