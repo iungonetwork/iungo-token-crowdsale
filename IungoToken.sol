@@ -245,7 +245,7 @@ contract IungoToken is StandardToken, Owned {
     string public constant name = "IUNGO token";
     string public constant symbol = "ING";
     uint8 public constant decimals = 18;
-    
+
     /// Maximum tokens to be allocated (100 million)
     uint256 public constant HARD_CAP = 100000000 * 10**uint256(decimals);
 
@@ -260,6 +260,9 @@ contract IungoToken is StandardToken, Owned {
 
     /// The owner of this address is the Reserve fund
     address public reserveFundAddress;
+
+    /// This address will be sent all the received ether
+    address public fundsTreasury;
 
     /// This is the address of the timelock contract for 
     /// the first 1/3 of the Founders fund tokens
@@ -292,13 +295,13 @@ contract IungoToken is StandardToken, Owned {
     /// seconds since 01.01.1970 to 31.01.2018 23:59:59 UTC
     /// tier 4 end time; closing token sale; trading open
     uint64 private constant date31Jan2018 = 1517443199;
-    
+
     /// Base exchange rate is set to 1 ETH = 1000 ING
     uint256 public constant BASE_RATE = 1000;
 
     /// no tokens can be ever issued when this is set to "true"
     bool public tokenSaleClosed = false;
-    
+
     /// Issue event index starting from 0.
     uint256 public issueIndex = 0;
 
@@ -307,8 +310,8 @@ contract IungoToken is StandardToken, Owned {
 
     /// Require that the buyers can still purchase
     modifier inProgress {
-        require(totalSupply < TOKENS_SALE_HARD_CAP 
-                && !tokenSaleClosed 
+        require(totalSupply < TOKENS_SALE_HARD_CAP
+                && !tokenSaleClosed
                 && !saleDue());
         _;
     }
@@ -324,7 +327,7 @@ contract IungoToken is StandardToken, Owned {
         require(saleDue());
         _;
     }
-    
+
     /**
      * CONSTRUCTOR
      *
@@ -334,14 +337,16 @@ contract IungoToken is StandardToken, Owned {
      * @param _reserveFundAddress The owner of this address is the Reserve fund
      */
     function IungoToken (address _foundersFundAddress, address _teamFundAddress,
-                         address _reserveFundAddress) public {
+                         address _reserveFundAddress, address _fundsTreasury) public {
         require(_foundersFundAddress != address(0));
         require(_teamFundAddress != address(0));
         require(_reserveFundAddress != address(0));
+        require(_fundsTreasury != address(0));
 
         foundersFundAddress = _foundersFundAddress;
         teamFundAddress = _teamFundAddress;
         reserveFundAddress = _reserveFundAddress;
+        fundsTreasury = _fundsTreasury;
     }
 
     /// @dev Returns the current price.
@@ -354,7 +359,7 @@ contract IungoToken is StandardToken, Owned {
     function () public payable {
         purchaseTokens(msg.sender);
     }
-    
+
     /// @dev Issue token based on Ether received.
     /// @param _beneficiary Address that newly issued token will be sent to.
     function purchaseTokens(address _beneficiary) public payable inProgress {
@@ -363,6 +368,9 @@ contract IungoToken is StandardToken, Owned {
 
         uint256 tokens = computeTokenAmount(msg.value);
         doIssueTokens(_beneficiary, tokens);
+
+        /// forward the raised funds to the fund address
+        fundsTreasury.transfer(msg.value);
     }
 
     /// @dev Batch issue tokens on the presale
@@ -419,7 +427,7 @@ contract IungoToken is StandardToken, Owned {
 
         tokens = tokenBase.add(tokenBonus);
     }
-    
+
     /// @dev Determine the current sale tier.
     /// @return the index of the current sale tier.
     function currentTierDiscountPercentage() internal view returns (uint64) {
@@ -431,6 +439,14 @@ contract IungoToken is StandardToken, Owned {
         if(_now > date21Dec2017) return 35;
         return 50;
     }
+
+    // function getnow() public view returns (uint64) {
+    //     return uint64(block.timestamp);
+    // }
+    // 
+    // function setnow(uint64 time) public {
+    //     _now = time;
+    // }
 
     /// @dev Finalize the sale and distribute the reserve, team tokens, lock the founders tokens
     function close() public onlyOwner beforeEnd {
@@ -510,16 +526,16 @@ contract IungoToken is StandardToken, Owned {
 
         /// burn the unallocated tokens - no more tokens can be issued after this line
         tokenSaleClosed = true;
-        
-        /// forward the raised funds to the contract creator
-        owner.transfer(this.balance);
+
+        /// forward the raised funds to the fund address
+        fundsTreasury.transfer(this.balance);
     }
-    
+
     /// @return if the token sale is finished
     function saleDue() public view returns (bool) {
         return date31Jan2018 < uint64(block.timestamp);
     }
-    
+
     /// Transfer limited by the tradingOpen modifier (time is 01 Feb 2018 or later)
     function transferFrom(address _from, address _to, uint256 _value) public tradingOpen returns (bool) {
         return super.transferFrom(_from, _to, _value);
