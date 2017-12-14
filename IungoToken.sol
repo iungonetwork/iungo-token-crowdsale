@@ -338,15 +338,10 @@ contract IungoToken is StandardToken, Owned {
      */
     function IungoToken (address _foundersFundAddress, address _teamFundAddress,
                          address _reserveFundAddress, address _fundsTreasury) public {
-        require(_foundersFundAddress != address(0));
-        require(_teamFundAddress != address(0));
-        require(_reserveFundAddress != address(0));
-        require(_fundsTreasury != address(0));
-
-        foundersFundAddress = _foundersFundAddress;
-        teamFundAddress = _teamFundAddress;
-        reserveFundAddress = _reserveFundAddress;
-        fundsTreasury = _fundsTreasury;
+        foundersFundAddress = 0x9CB0016511Fb93EAc7bC585A2bc2f0C34DEcEa15;
+        teamFundAddress = 0xDda7003998244f6161A5BBAf0F4ed5a40E908b51;
+        reserveFundAddress = 0x9186b48Db83E63adEDaB43C19345f39c83928E3f;
+        fundsTreasury = 0x31a633c4eE2C317DE2C65beb00593EAdD9f172d6;
     }
 
     /// @dev Returns the current price.
